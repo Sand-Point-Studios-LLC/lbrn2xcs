@@ -1,0 +1,29 @@
+[project]
+name = "lbrn2xcs"
+version = "0.0.1"
+description = "Batch-convert LightBurn projects (.lbrn/.lbrn2) toward xTool Creative Space (XCS), via SVG/DXF (and experimental native .xcs)."
+requires-python = ">=3.13"
+dependencies = [
+    "svgwrite>=1.4",
+    "ezdxf>=1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+lbrn2xcs = "lbrn2xcs.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
