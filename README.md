@@ -101,11 +101,59 @@ palette: it creates one layer per distinct stroke colour, named with the upperca
 hex. So LightBurn's palette colours are written as XCS layer colours directly and
 the layer structure survives exactly.
 
-Machine settings are written with XCS's own defaults for a fresh import
-(`VECTOR_ENGRAVING`, `materialType: customize`) rather than translated from
-LightBurn. xTool's material model is not a unit conversion away from LightBurn's
-power/speed, and a silently wrong power setting is worse than an obvious default
-you set in XCS.
+### Power and speed translation
+
+LightBurn and XCS use the same units (mm/s, % power), so this is not a unit
+conversion — it is a machine conversion, from a 40 W blue-diode D1 Pro to an 80 W
+CO2 P3. Wavelength matters more than wattage here: wood absorbs 10.6 µm far
+better than 455 nm, so the P3 needs much less energy than the 2x power ratio
+suggests, and the gap widens the deeper the beam works.
+
+Both anchors are measured, not theoretical:
+
+| | D1 Pro 40 W | P3 80 W |
+|---|---|---|
+| Through-cut, 3 mm plywood | 8.33 mm/s @ 100% = 4.80 J/mm | 50 mm/s @ 80% = 1.28 J/mm (0.27x) |
+| Surface engrave, wood | 200 mm/s @ 80% = 0.16 J/mm | ~275 mm/s @ 45% = 0.13 J/mm (0.82x) |
+
+The cut anchor is solid: 8.33 mm/s @ 100% is both this library's most common cut
+setting (360 layers) and inside the published 8–12 mm/s @ 100% for 3 mm basswood
+on a diode. The engrave anchor is softer — calibrate it.
+
+Two questions are answered separately, which matters:
+
+* **What operation is this?** Layer name first, speed as fallback. This picks the
+  XCS `processingType`.
+* **How hard is the beam working?** Delivered energy alone, interpolated between
+  the anchors. This picks the conversion factor.
+
+Keeping them apart is the whole point. A layer named `1 - Engrave - Roads` running
+at 7.5 mm/s @ 100% is an engrave and stays one in XCS, but energetically it is
+doing a cut's worth of work — converting it as light surface marking would burn
+straight through the piece.
+
+Also carried across: passes to `repeat`, fill line interval to `density`, kerf to
+`kerfDistance`, and LightBurn's disabled/hidden layers to `processIgnore` (about
+47% of layers in this library, since stacked designs enable one sheet at a time).
+
+```bash
+lbrn2xcs project.lbrn2 --format xcs                       # translate (default)
+lbrn2xcs project.lbrn2 --format xcs --power-scale 0.8     # run 20% light while calibrating
+lbrn2xcs project.lbrn2 --format xcs --source-machine none # leave XCS defaults alone
+```
+
+Every conversion is printed per layer so you can check it before burning:
+
+```
+  C00 0 - Cut              8.3mm/s 100% x1  ->  cut   37.7mm/s  60.4% x1
+  C09 0 - Engraving      266.7mm/s  60% x1  ->  fill 417.0mm/s  38.4% x1  [density 125]
+```
+
+**Test on scrap first.** The conversion preserves the *relative* aggressiveness of
+each layer, but it cannot know what material or thickness a layer was tuned for —
+that is nowhere in the file. And none of it survives a change of material class:
+clear acrylic cannot be cut by a diode at all but cuts well on CO2, so acrylic
+layers need redoing by hand rather than scaling.
 
 ### Verification status
 
@@ -116,9 +164,10 @@ identical to its SVG. Every field and top-level key emitted is one XCS writes
 itself; the test suite asserts that against the probe file and skips if you
 haven't produced one.
 
-Rough edges: the material shows as *Unknown Material* with a "Modify parameters"
-prompt, which follows from writing `material: 0` and XCS's default power/speed
-rather than translating LightBurn's. Set the material once in XCS after opening.
+Rough edge: the material shows as *Unknown Material* with a "Modify parameters"
+prompt, because `material: 0` is written — no material is claimed, since the
+source file never records one. Power and speed *are* translated (above); pick the
+material once in XCS after opening.
 
 If something looks off, the harness is the way in:
 

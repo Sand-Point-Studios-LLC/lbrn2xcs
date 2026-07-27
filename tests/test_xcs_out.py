@@ -285,10 +285,32 @@ def test_our_document_uses_only_top_level_keys_xcs_writes(tmp_path):
     assert set(ours["canvas"][0]) - set(probe["canvas"][0]) == set()
 
 
+def _first_process_entry(doc: dict) -> dict:
+    return doc["device"]["data"]["value"][0][1]["displays"]["value"][0][1]
+
+
 def test_our_process_defaults_match_what_xcs_writes(tmp_path):
-    probe = load_probe()
-    probe_entry = probe["device"]["data"]["value"][0][1]["displays"]["value"][0][1]
-    ours = project_to_xcs_dict(make_project(tmp_path))
-    our_entry = ours["device"]["data"]["value"][0][1]["displays"]["value"][0][1]
+    """With translation off, the device block is byte-identical to XCS's own."""
+    probe_entry = _first_process_entry(load_probe())
+    ours = project_to_xcs_dict(make_project(tmp_path), source_machine=None)
+    our_entry = _first_process_entry(ours)
     assert set(our_entry) == set(probe_entry)
     assert our_entry["data"] == probe_entry["data"]
+
+
+def test_translated_settings_keep_xcs_structure_and_only_change_values(tmp_path):
+    """With translation on, the shape of the block is unchanged — only numbers."""
+    probe_entry = _first_process_entry(load_probe())
+    our_entry = _first_process_entry(project_to_xcs_dict(make_project(tmp_path)))
+
+    assert set(our_entry) == set(probe_entry)
+    assert set(our_entry["data"]) == set(probe_entry["data"])
+    for op, block in our_entry["data"].items():
+        ours = block["parameter"]["customize"]
+        theirs = probe_entry["data"][op]["parameter"]["customize"]
+        assert set(ours) == set(theirs), f"{op} gained or lost a parameter"
+
+    # The live operation's numbers must actually have been translated.
+    live = our_entry["data"][our_entry["processingType"]]["parameter"]["customize"]
+    default = probe_entry["data"][our_entry["processingType"]]["parameter"]["customize"]
+    assert (live["power"], live["speed"]) != (default["power"], default["speed"])

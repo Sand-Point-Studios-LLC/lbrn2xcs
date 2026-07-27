@@ -126,11 +126,20 @@ trips exactly, keeps beziers, and avoids a second geometry encoding to get wrong
 `device.data` maps canvas id → `{mode, data, displays}`, where `displays` is a
 list of `[displayId, config]` pairs holding `processingType`
 (`VECTOR_CUTTING` / `VECTOR_ENGRAVING` / `FILL_VECTOR_ENGRAVING`) and full
-parameter blocks per type. Written here with XCS's own fresh-import defaults
-(`VECTOR_ENGRAVING`, `materialType: customize`, power 1 / speed 20) rather than
-translated from LightBurn: xTool's material model is not a unit conversion away
-from LightBurn's mm/s + %power, and a silently wrong power setting is worse than
-an obvious default.
+parameter blocks per type. All three blocks are always present; `processingType`
+selects the live one.
+
+These are now translated from LightBurn — see `src/lbrn2xcs/settings_map.py` for
+the derivation. The design decision worth remembering: **operation and energy
+regime are decided separately**. The layer name says what the operation *is* (and
+so what XCS should run); the delivered energy says how hard the beam is *working*
+(and so which conversion factor applies). Conflating them burns through
+deep-engrave layers, which are named "engrave" but run at cut energy.
+
+Sanity check on the result: across the library the median converted cut lands at
+35.7 mm/s @ 60.4% = 1.35 J/mm, against xTool's published 1.28 J/mm for 3 mm
+plywood on the P3 — within 5% of the manufacturer figure, having been derived
+from the library's own settings.
 
 ### What's verified, and what isn't
 

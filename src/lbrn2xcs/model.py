@@ -149,6 +149,10 @@ class Layer:
     output: bool = True
     hidden: bool = False
     priority: int = 0
+    interval: float | None = None
+    """Raster line spacing in mm (fill layers only)."""
+    kerf: float = 0.0
+    """Kerf compensation in mm."""
 
     @property
     def display_name(self) -> str:

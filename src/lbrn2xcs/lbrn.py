@@ -403,6 +403,12 @@ def _parse_layers(root: ET.Element) -> dict[int, Layer]:
             output=_bool_value(node, "doOutput", True),
             hidden=_bool_value(node, "hide", False),
             priority=int(_float(_child_value(node, "priority"), 0)),
+            interval=(
+                _float(_child_value(node, "interval"))
+                if _child_value(node, "interval") is not None
+                else None
+            ),
+            kerf=_float(_child_value(node, "kerf")),
         )
     return layers
 

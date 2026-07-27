@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .lbrn import parse_lbrn
 from .model import Project
+from .settings_map import SOURCE_MACHINES, Machine, convert
 from .svg_out import project_to_svg
 
 SUFFIXES = (".lbrn", ".lbrn2")
@@ -63,12 +64,38 @@ def _summarise(project: Project) -> str:
     return "  ".join(parts)
 
 
+def _settings_report(project: Project, machine: Machine) -> list[str]:
+    """One line per used layer showing the LightBurn -> P3 translation."""
+    lines = []
+    for layer in project.used_layers():
+        s = convert(layer, source=machine)
+        op = {"VECTOR_CUTTING": "cut", "VECTOR_ENGRAVING": "line", "FILL_VECTOR_ENGRAVING": "fill"}[
+            s.operation
+        ]
+        flags = []
+        if s.ignored:
+            flags.append("no output")
+        if s.note:
+            flags.append(s.note)
+        if s.density is not None:
+            flags.append(f"density {s.density:g}")
+        lines.append(
+            f"      C{layer.index:02d} {layer.display_name[:24]:26} "
+            f"{layer.speed or 0:7.1f}mm/s {layer.max_power or 0:3.0f}% x{layer.num_passes}"
+            f"  ->  {op:4} {s.speed:7.1f}mm/s {s.power:5.1f}% x{s.repeat}"
+            + ("  [" + "; ".join(flags) + "]" if flags else "")
+        )
+    return lines
+
+
 def convert_one(
     source: Path,
     input_root: Path,
     out_dir: Path | None,
     formats: tuple[str, ...],
     tolerance: float,
+    machine: Machine | None = None,
+    power_scale: float = 1.0,
 ) -> tuple[Project, list[Path]]:
     project = parse_lbrn(source)
     written: list[Path] = []
@@ -92,7 +119,13 @@ def convert_one(
 
         target = _output_path(source, input_root, out_dir, ".xcs")
         target.parent.mkdir(parents=True, exist_ok=True)
-        write_xcs(project, target, title=source.stem)
+        write_xcs(
+            project,
+            target,
+            title=source.stem,
+            source_machine=machine,
+            power_scale=power_scale,
+        )
         written.append(target)
 
     return project, written
@@ -124,6 +157,25 @@ def main(argv: list[str] | None = None) -> int:
         default=0.05,
         help="DXF bezier flattening tolerance in mm (default: 0.05)",
     )
+    parser.add_argument(
+        "--source-machine",
+        choices=(*SOURCE_MACHINES, "none"),
+        default="d1pro40",
+        help=(
+            "Machine the LightBurn settings were tuned on, used to translate "
+            "power/speed for the P3 when writing .xcs. 'none' keeps XCS's own "
+            "defaults instead (default: d1pro40)"
+        ),
+    )
+    parser.add_argument(
+        "--power-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Multiply translated energy. Below 1.0 runs deliberately light while "
+            "calibrating, e.g. 0.8 (default: 1.0)"
+        ),
+    )
     parser.add_argument("--quiet", action="store_true", help="Only report failures")
     args = parser.parse_args(argv)
 
@@ -134,6 +186,14 @@ def main(argv: list[str] | None = None) -> int:
         "both": ("svg", "dxf"),
         "all": ("svg", "dxf", "xcs"),
     }.get(args.format, (args.format,))
+
+    machine = SOURCE_MACHINES.get(args.source_machine)
+    if "xcs" in formats and not args.quiet:
+        if machine:
+            print(f"Translating settings: {machine.name} -> xTool P3 80W", end="")
+            print(f" (energy x{args.power_scale:g})" if args.power_scale != 1.0 else "")
+        else:
+            print("Settings: leaving XCS defaults (no translation)")
 
     inputs = _find_inputs(args.input, args.recursive)
     if not inputs:
@@ -148,7 +208,13 @@ def main(argv: list[str] | None = None) -> int:
     for source in inputs:
         try:
             project, written = convert_one(
-                source, args.input, args.out, formats, args.tolerance
+                source,
+                args.input,
+                args.out,
+                formats,
+                args.tolerance,
+                machine=machine,
+                power_scale=args.power_scale,
             )
         except Exception as exc:  # noqa: BLE001 — one bad file must not stop a batch
             failures.append((source, f"{type(exc).__name__}: {exc}"))
@@ -163,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
             names = ", ".join(p.name for p in written)
             print(f"  {source.name} -> {names}")
             print(f"      {_summarise(project)}")
+            if "xcs" in formats and machine is not None:
+                for line in _settings_report(project, machine):
+                    print(line)
 
     ok = len(inputs) - len(failures)
     print(f"\nDone: {ok}/{len(inputs)} converted.")

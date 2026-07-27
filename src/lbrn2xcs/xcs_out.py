@@ -44,6 +44,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from .model import Project
+from .settings_map import D1_PRO_40W, P3_80W, Machine, XcsSettings, convert
 from .svg_path import contour_to_path_data, contours_bbox, parse_path_data
 
 # Version strings as written by XCS 1.5.8 / canvas 2.15.93.
@@ -217,15 +218,39 @@ def _display(
     }
 
 
-def _process_entry(display_id: str) -> list:
+def _process_entry(display_id: str, settings: XcsSettings | None) -> list:
+    """One [displayId, config] pair for the device block.
+
+    With no *settings* this is XCS's own fresh-import default. With settings, the
+    parameters for the chosen operation are filled in and the others left at
+    their defaults — which is how XCS itself stores a file: all three blocks
+    present, `processingType` selecting the live one.
+    """
+    data = deepcopy(DEFAULT_PROCESS_DATA)
+    operation = "VECTOR_ENGRAVING"
+    ignored = False
+
+    if settings is not None:
+        operation = settings.operation
+        ignored = settings.ignored
+        params = data[operation]["parameter"]["customize"]
+        params["power"] = settings.power
+        params["speed"] = settings.speed
+        params["repeat"] = settings.repeat
+        if settings.density is not None and "density" in params:
+            params["density"] = settings.density
+        if settings.kerf:
+            params["enableKerf"] = True
+            params["kerfDistance"] = settings.kerf
+
     return [
         display_id,
         {
             "isFill": False,
             "type": "PATH",
-            "processingType": "VECTOR_ENGRAVING",
-            "data": deepcopy(DEFAULT_PROCESS_DATA),
-            "processIgnore": False,
+            "processingType": operation,
+            "data": data,
+            "processIgnore": ignored,
             "isWhiteModel": True,
         },
     ]
@@ -237,11 +262,15 @@ def project_to_xcs_dict(
     title: str = "",
     origin: tuple[float, float] = (0.0, 0.0),
     device_id: str = DEFAULT_DEVICE_ID,
+    source_machine: Machine | None = D1_PRO_40W,
+    target_machine: Machine = P3_80W,
+    power_scale: float = 1.0,
 ) -> dict:
     """Build the ``.xcs`` document for *project* as a plain dict.
 
     *origin* is where the drawing's top-left corner lands on the XCS canvas, in
-    millimetres.
+    millimetres. Pass ``source_machine=None`` to skip settings translation and
+    fall back to XCS's own fresh-import defaults.
     """
     min_x, min_y, max_x, max_y = project.bbox()
     graphic_x, graphic_y = origin
@@ -257,6 +286,7 @@ def project_to_xcs_dict(
     group_tag = f"g-{_uuid()}"
 
     total = sum(len(shapes) for shapes in by_layer.values())
+    settings_by_display: dict[str, XcsSettings] = {}
 
     for slot, index in enumerate(sorted(by_layer)):
         layer = project.layers.get(index)
@@ -265,6 +295,11 @@ def project_to_xcs_dict(
         color = (layer.color if layer else "#000000").lower()
         layer_data.setdefault(
             color, {"name": color.upper(), "order": slot + 1, "visible": True}
+        )
+        settings = (
+            convert(layer, source=source_machine, target=target_machine, scale=power_scale)
+            if layer is not None and source_machine is not None
+            else None
         )
 
         for shape in by_layer[index]:
@@ -290,6 +325,8 @@ def project_to_xcs_dict(
                     compound=len(local) > 1,
                 )
             )
+            if settings is not None:
+                settings_by_display[displays[-1]["id"]] = settings
 
     canvas_id = _uuid()
     created = _now_ms()
@@ -355,7 +392,10 @@ def project_to_xcs_dict(
                             },
                             "displays": {
                                 "dataType": "Map",
-                                "value": [_process_entry(d["id"]) for d in displays],
+                                "value": [
+                                    _process_entry(d["id"], settings_by_display.get(d["id"]))
+                                    for d in displays
+                                ],
                             },
                         },
                     ]
@@ -385,7 +425,18 @@ def write_xcs(
     title: str = "",
     origin: tuple[float, float] = (0.0, 0.0),
     device_id: str = DEFAULT_DEVICE_ID,
+    source_machine: Machine | None = D1_PRO_40W,
+    target_machine: Machine = P3_80W,
+    power_scale: float = 1.0,
 ) -> None:
     """Write *project* to *path* as a ``.xcs`` file."""
-    doc = project_to_xcs_dict(project, title=title, origin=origin, device_id=device_id)
+    doc = project_to_xcs_dict(
+        project,
+        title=title,
+        origin=origin,
+        device_id=device_id,
+        source_machine=source_machine,
+        target_machine=target_machine,
+        power_scale=power_scale,
+    )
     Path(path).write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
