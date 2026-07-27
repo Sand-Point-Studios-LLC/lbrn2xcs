@@ -281,20 +281,71 @@ def test_cut_index_without_cut_setting_still_gets_a_layer(tmp_path):
     assert project.layers[5].color == "#FF8000"
 
 
-def test_text_is_converted_through_its_backup_path(tmp_path):
-    body = f"""{CUT_SETTING}
-  <Shape Type="Text" CutIndex="0" Str="hi" HasBackupPath="1">
+BACKUP_PATH = """
     <BackupPath Type="Path" CutIndex="0">
       <XForm>1 0 0 1 3 4</XForm>
       <VertList>V0 0c0x1c1x1V10 0c0x1c1x1</VertList>
       <PrimList>L0 1</PrimList>
-    </BackupPath>
+    </BackupPath>"""
+
+
+def test_text_is_converted_through_its_backup_path(tmp_path):
+    body = f"""{CUT_SETTING}
+  <Shape Type="Text" CutIndex="0" Str="hi" HasBackupPath="1">{BACKUP_PATH}
     <XForm>1 0 0 1 0 0</XForm>
   </Shape>"""
     project = parse_lbrn(write(tmp_path, body))
     assert len(project.shapes) == 1
     assert project.shapes[0].contours[0].start == (3.0, 4.0)
     assert project.skipped == {}
+
+
+def test_backup_path_ignores_the_text_shapes_own_transform(tmp_path):
+    """The backup path is already in absolute coordinates.
+
+    Text shapes routinely carry a [0 1; 1 0] reflection; applying it on top of
+    the backup path mirrors every glyph and throws it off the canvas.
+    """
+    body = f"""{CUT_SETTING}
+  <Shape Type="Text" CutIndex="0" Str="hi" HasBackupPath="1">{BACKUP_PATH}
+    <XForm>0 0.86 0.86 0 265 47</XForm>
+  </Shape>"""
+    project = parse_lbrn(write(tmp_path, body))
+    (shape,) = project.shapes
+    assert shape.contours[0].start == (3.0, 4.0)
+    assert [s.end for s in shape.contours[0].segments] == [(13.0, 4.0)]
+
+
+def test_backup_path_ignores_an_enclosing_group_transform(tmp_path):
+    """Group transforms are baked in too — the geometry is fully absolute."""
+    body = f"""{CUT_SETTING}
+  <Shape Type="Group" CutIndex="0">
+    <XForm>2 0 0 2 500 500</XForm>
+    <Children>
+      <Shape Type="Text" CutIndex="0" Str="hi" HasBackupPath="1">{BACKUP_PATH}
+        <XForm>1 0 0 1 20 30</XForm>
+      </Shape>
+    </Children>
+  </Shape>"""
+    project = parse_lbrn(write(tmp_path, body))
+    (shape,) = project.shapes
+    assert shape.contours[0].start == (3.0, 4.0)
+
+
+def test_non_text_shapes_still_honour_group_transforms(tmp_path):
+    """The absolute rule is specific to BackupPath, not a general opt-out."""
+    body = f"""{CUT_SETTING}
+  <Shape Type="Group" CutIndex="0">
+    <XForm>2 0 0 2 500 500</XForm>
+    <Children>
+      <Shape Type="Rect" CutIndex="0" W="10" H="10" Cr="0">
+        <XForm>1 0 0 1 0 0</XForm>
+      </Shape>
+    </Children>
+  </Shape>"""
+    project = parse_lbrn(write(tmp_path, body))
+    min_x, min_y, max_x, max_y = project.bbox()
+    assert (min_x, min_y, max_x, max_y) == (490.0, 490.0, 510.0, 510.0)
 
 
 def test_text_without_backup_path_is_reported(tmp_path):

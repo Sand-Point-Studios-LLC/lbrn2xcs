@@ -48,6 +48,7 @@ Verified against a 414-file library: **1,403,289 shapes, zero failures.**
 | `Rect` (incl. corner radius), `Ellipse`, `Polygon`, `Line` | ✅ |
 | `Group` / nested transforms | ✅ |
 | `Text` | ✅ via LightBurn's vectorised `<BackupPath>` — no font handling needed |
+| Nested groups, rotated/mirrored text | ✅ backup paths are absolute; verified against LightBurn's embedded thumbnails |
 | `VertID`/`PrimID` shared geometry | ✅ 201k vertex lists serve 1.4M paths |
 | Layers (`CutSetting`) → colour + name | ✅ |
 | `Bitmap` (photo engraves) | ❌ raster — 159 shapes across 97 files |

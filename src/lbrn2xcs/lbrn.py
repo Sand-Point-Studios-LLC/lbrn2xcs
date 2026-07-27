@@ -341,10 +341,20 @@ def _walk(
 
     if kind == "Text":
         # Prefer LightBurn's own vectorised glyph outlines over re-rendering the
-        # font. The backup path's XForm is relative to the Text shape's.
+        # font. <BackupPath> is a fully baked, self-contained shape: it carries
+        # its own Type, CutIndex and XForm, and that XForm places the glyphs in
+        # *absolute project coordinates* — the Text shape's own transform and any
+        # enclosing group's are already folded into it.
+        #
+        # So it starts from the identity, not from the accumulated matrix.
+        # Applying the Text's XForm as well double-counts a transform that is
+        # typically [0 1; 1 0] — a reflection about the diagonal — which mirrors
+        # every label and flings it off the canvas. Checked against the
+        # <Thumbnail> LightBurn embeds in the file, which is what the design is
+        # actually supposed to look like.
         backup = elem.find("BackupPath")
         if backup is not None:
-            _walk(backup, matrix, cut_index, project, cache)
+            _walk(backup, IDENTITY, cut_index, project, cache)
         else:
             project.skipped["Text (no BackupPath)"] = (
                 project.skipped.get("Text (no BackupPath)", 0) + 1

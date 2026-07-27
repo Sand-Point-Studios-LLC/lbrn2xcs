@@ -45,6 +45,20 @@ reference order cannot matter.
 the rendered glyphs. Converting through it sidesteps fonts entirely. 2,126 Text
 shapes in this corpus; exactly one lacks a backup path.
 
+Crucially, a backup path is **fully baked**: it has its own `Type`, `CutIndex` and
+`XForm`, and that `XForm` places the glyphs in *absolute project coordinates*. The
+Text shape's transform and any enclosing group's are already folded in, so it must
+be walked from the identity, not from the accumulated matrix. Applying the Text's
+own transform as well double-counts it — and text transforms are routinely
+`[0 1; 1 0]`, a reflection about the diagonal, so every label ends up mirrored and
+flung outside the canvas. Two useful checks on this:
+
+* LightBurn embeds a `<Thumbnail>` (base64 PNG) in every file. Decoding it shows
+  exactly what the design should look like — cheap, decisive ground truth for any
+  placement question, and worth reaching for before reasoning about matrices.
+* Across all 161 text-bearing files in the corpus, text now sits *entirely* inside
+  the drawing's bounding box: maximum overhang 0.0000 of the drawing size.
+
 ### Known gaps
 
 | Gap | Count | Note |
