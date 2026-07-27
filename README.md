@@ -109,13 +109,18 @@ you set in XCS.
 
 ### Verification status
 
-Confirmed: XCS's own output decodes exactly as described, and a `.xcs` written by
-this tool decodes back to geometry identical to its SVG. Every field and top-level
-key emitted is one XCS writes itself — the test suite asserts that against the
-probe file, and skips if you haven't produced one.
+**XCS opens files written by this tool** — confirmed on a real conversion, with
+geometry, scale and the processing panel all populated. XCS's own output decodes
+exactly as described above, and a written `.xcs` decodes back to geometry
+identical to its SVG. Every field and top-level key emitted is one XCS writes
+itself; the test suite asserts that against the probe file and skips if you
+haven't produced one.
 
-Not yet confirmed: that XCS *opens* a file written here. Try one, and if anything
-looks off, the harness is the way in:
+Rough edges: the material shows as *Unknown Material* with a "Modify parameters"
+prompt, which follows from writing `material: 0` and XCS's default power/speed
+rather than translating LightBurn's. Set the material once in XCS after opening.
+
+If something looks off, the harness is the way in:
 
 ```bash
 python tools/make_probe_svg.py          # known-geometry SVG, exact mm coordinates
