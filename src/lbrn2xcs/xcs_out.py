@@ -1,62 +1,135 @@
 """Native ``.xcs`` writer — Tier B.
 
-``.xcs`` is undocumented, but it is plain UTF-8 JSON (not zipped), and the parts
-that carry geometry were worked out by measuring 5,995 displays across real files
-saved by XCS itself. What follows is the observed contract, not a guess:
+``.xcs`` is undocumented but is plain UTF-8 JSON (not zipped). The contract below
+was established by round-tripping a known-geometry probe through XCS itself
+(``tools/make_probe_svg.py`` → import → save → ``tools/decode_xcs.py``) and
+cross-checked against six unrelated real projects.
 
-**Geometry.** Each drawable is a ``display`` of type ``PATH`` whose ``dPath`` is
-ordinary SVG path data in a *local* coordinate space. The mapping from local
-units to canvas millimetres is::
+**Geometry.** Each drawable is a ``display``. ``PATH`` displays carry ``dPath``:
+ordinary SVG path data, Y-down, in millimetres, kept *verbatim* — XCS stores an
+imported path's data byte-for-byte and positions it with::
 
     canvas_x = graphicX + scale.x * local_x
-    canvas_y = graphicY - scale.y * local_y      # note the minus
+    canvas_y = graphicY + scale.y * local_y
 
-Both formulas reproduce the stored ``x``/``y`` on 100% of displays in every
-sample (``x`` and ``y`` hold the local bbox's minimum corner run through the same
-transform), and ``width``/``height`` are the local bbox size times ``scale``.
-The negated Y is the ``skew.x = π`` that every display carries.
+``x``/``y`` are the local bbox minimum corner through that same transform (using
+the curve's true extrema, not its control points) and ``width``/``height`` are the
+local bbox size times ``scale``.
 
-This writer exploits the negation rather than fighting it: LightBurn is already
-Y-up, so ``dPath`` is emitted in LightBurn's own orientation and ``graphicY`` is
-set to the drawing height, which makes ``canvas_y`` come out Y-down and correct
-with no flipping of the geometry itself.
+A caution worth recording: files that have been vertically mirrored carry
+``skew.x = π`` and then the Y term is *negated*. Measuring only such files makes
+the minus look intrinsic — it isn't. A straightforward import has ``skew = 0``,
+which is what this writer emits.
 
-**Layers.** ``layerData`` maps an XCS palette colour to a name and z-order, and
-each display points at one via ``layerTag``/``layerColor``. XCS snaps imported
-stroke colours onto that fixed palette, keeping the pre-import colour in
-``originColor`` — so LightBurn's palette colour goes there and the LightBurn
-layer index picks the XCS palette slot.
+**Layers.** ``layerData`` maps a colour to ``{name, order, visible}`` and displays
+point at one via ``layerTag``/``layerColor``. XCS does not force imported art onto
+a fixed palette: it creates a layer per distinct stroke colour, named with the
+uppercase hex. So LightBurn's palette colours are passed straight through and
+LightBurn's layer structure survives exactly.
 
-**Machine settings.** The ``device`` block holds per-display power/speed keyed by
-display id. It is left empty here, exactly as the older XCS-written samples do,
-so XCS applies its own material defaults on open — mapping LightBurn's
-power/speed onto xTool's material model is a separate problem, and getting it
-wrong silently would be worse than not doing it.
-
-Treat this as experimental until a round-trip is confirmed against your XCS build:
-``tools/make_probe_svg.py`` and ``tools/decode_xcs.py`` exist for exactly that.
+**Machine settings.** ``device`` holds per-display processing config keyed by
+display id. Written here with XCS's own defaults for a freshly imported drawing
+(``VECTOR_ENGRAVING``, ``materialType: customize``) rather than translated from
+LightBurn's power/speed — xTool's material model is not a unit conversion away
+from LightBurn's, and a silently wrong power setting is worse than an obvious
+default the user sets in XCS.
 """
 
 from __future__ import annotations
 
 import json
-import math
 import time
 import uuid
+from copy import deepcopy
 from pathlib import Path
 
 from .model import Project
-from .palette import xcs_layer
 from .svg_path import contour_to_path_data, contours_bbox, parse_path_data
 
-# Schema/app version strings copied from files saved by XCS 2.15.93 (the
-# "1.5.8" here is the project-file schema version, not the application version).
+# Version strings as written by XCS 1.5.8 / canvas 2.15.93.
 XCS_FILE_VERSION = "1.5.8"
 XCS_CANVAS_VERSION = "2.15.93"
 XCS_MIN_REQUIRED_VERSION = "2.6.0"
 
-# Every display in every sample carries this: a vertical mirror expressed as skew.
-Y_MIRROR_SKEW = math.pi
+# Target machine. XCS records this on save; "P3" is the xTool P3.
+DEFAULT_DEVICE_ID = "P3"
+DEFAULT_DEVICE_POWER = [80, 5, 0]
+
+# Constants XCS writes on every display regardless of content.
+STROKE_WIDTH = 0.2834645669291339
+LINE_COLOR = 16421416
+FILL_COLOR = "#f9932b"
+
+# XCS's default processing parameters for a newly imported drawing, copied
+# verbatim from a probe file it saved itself.
+DEFAULT_PROCESS_DATA = {
+    "VECTOR_CUTTING": {
+        "materialType": "customize",
+        "planType": "official",
+        "parameter": {
+            "customize": {
+                "power": 1,
+                "speed": 16,
+                "repeat": 1,
+                "cuttingDrop": False,
+                "sinkingMethod": "one",
+                "firstCuttingDropValue": 1,
+                "cuttingDropValue": 1,
+                "descentIntervalDescent": 1,
+                "descentPerStep": 1,
+                "enableBreakPoint": False,
+                "breakPointSize": 0.5,
+                "breakPointCount": 2,
+                "breakPointMode": "count",
+                "breakPointDistance": 100,
+                "breakPointPower": 0,
+                "enableKerf": False,
+                "kerfDistance": 0,
+                "laser": "LASER",
+                "processHead": "LASER",
+                "enableOverCut": False,
+                "overCutDistance": 0.5,
+                "airPump": 100,
+                "powerCutoff": "FOLLOW_ACTUALLY_POWER",
+                "powerCutoffValue": 9.5,
+            }
+        },
+    },
+    "VECTOR_ENGRAVING": {
+        "materialType": "customize",
+        "planType": "official",
+        "parameter": {
+            "customize": {
+                "power": 1,
+                "speed": 20,
+                "repeat": 1,
+                "enableKerf": False,
+                "kerfDistance": 0,
+                "laser": "LASER",
+                "processHead": "LASER",
+                "airPump": 25,
+            }
+        },
+    },
+    "FILL_VECTOR_ENGRAVING": {
+        "materialType": "customize",
+        "planType": "official",
+        "parameter": {
+            "customize": {
+                "power": 1,
+                "speed": 80,
+                "repeat": 1,
+                "density": 100,
+                "laser": "LASER",
+                "bitmapScanMode": "zMode",
+                "processHead": "LASER",
+                "airPump": 25,
+                "enableKerf": False,
+                "kerfDistance": 0,
+            }
+        },
+    },
+}
 
 
 def _now_ms() -> int:
@@ -67,15 +140,25 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
+def _z_order(base: int, index: int) -> float:
+    """Mirror XCS's ordering: integer base plus a fraction per display.
+
+    XCS uses one decimal place for a handful of displays and four for a thousand,
+    i.e. enough digits that the fractional parts stay ordered and below 1.
+    """
+    step = 10.0 ** -len(str(max(base, 1)))
+    return base + (index + 1) * step
+
+
 def _display(
     *,
     d_path: str,
     layer_color: str,
-    origin_color: str,
     local_bbox: tuple[float, float, float, float],
     graphic_x: float,
     graphic_y: float,
     z_order: float,
+    group_tag: str,
     closed: bool,
     compound: bool,
 ) -> dict:
@@ -84,24 +167,23 @@ def _display(
         "id": _uuid(),
         "name": None,
         "type": "PATH",
-        # x/y are the local bbox minimum corner mapped through the transform.
         "x": graphic_x + min_x,
-        "y": graphic_y - min_y,
+        "y": graphic_y + min_y,
         "angle": 0,
         "scale": {"x": 1, "y": 1},
-        "skew": {"x": Y_MIRROR_SKEW, "y": 0},
+        "skew": {"x": 0, "y": 0},
         "pivot": {"x": 0, "y": 0},
-        "localSkew": {"x": Y_MIRROR_SKEW, "y": 0},
+        "localSkew": {"x": 0, "y": 0},
         "offsetX": graphic_x,
         "offsetY": graphic_y,
         "lockRatio": True,
         "isClosePath": closed,
         "zOrder": z_order,
-        "groupTag": _uuid(),
+        "groupTag": group_tag,
         "layerTag": layer_color,
         "layerColor": layer_color,
         "visible": True,
-        "originColor": origin_color,
+        "originColor": layer_color,
         "enableTransform": True,
         "visibleState": True,
         "lockState": False,
@@ -113,9 +195,9 @@ def _display(
         "stroke": {
             "paintType": "color",
             "visible": True,
-            "color": 0,
+            "color": int(layer_color[1:], 16),
             "alpha": 1,
-            "width": 0.1,
+            "width": STROKE_WIDTH,
             "cap": "butt",
             "join": "miter",
             "miterLimit": 4,
@@ -124,67 +206,86 @@ def _display(
         "width": max_x - min_x,
         "height": max_y - min_y,
         "isFill": False,
-        "fillRule": "nonzero",
+        "lineColor": LINE_COLOR,
+        "fillColor": FILL_COLOR,
         "points": [],
         "dPath": d_path,
+        "fillRule": "nonzero",
         "graphicX": graphic_x,
         "graphicY": graphic_y,
         "isCompoundPath": compound,
     }
 
 
-def project_to_xcs_dict(project: Project, *, title: str = "") -> dict:
-    """Build the ``.xcs`` document for *project* as a plain dict."""
+def _process_entry(display_id: str) -> list:
+    return [
+        display_id,
+        {
+            "isFill": False,
+            "type": "PATH",
+            "processingType": "VECTOR_ENGRAVING",
+            "data": deepcopy(DEFAULT_PROCESS_DATA),
+            "processIgnore": False,
+            "isWhiteModel": True,
+        },
+    ]
+
+
+def project_to_xcs_dict(
+    project: Project,
+    *,
+    title: str = "",
+    origin: tuple[float, float] = (0.0, 0.0),
+    device_id: str = DEFAULT_DEVICE_ID,
+) -> dict:
+    """Build the ``.xcs`` document for *project* as a plain dict.
+
+    *origin* is where the drawing's top-left corner lands on the XCS canvas, in
+    millimetres.
+    """
     min_x, min_y, max_x, max_y = project.bbox()
-    height = max_y - min_y
+    graphic_x, graphic_y = origin
 
-    # dPath is emitted in LightBurn's Y-up space shifted to start at (0, 0);
-    # graphicY = height then makes canvas_y = height - local_y, i.e. Y-down.
-    graphic_x = 0.0
-    graphic_y = height
-
+    # dPath is Y-down millimetres, matching the SVG emitter, so an imported SVG
+    # and a written .xcs describe the same geometry the same way.
     def to_local(p: tuple[float, float]) -> tuple[float, float]:
-        return (p[0] - min_x, p[1] - min_y)
+        return (p[0] - min_x, max_y - p[1])
 
     by_layer = project.shapes_by_layer()
     layer_data: dict[str, dict] = {}
     displays: list[dict] = []
+    group_tag = f"g-{_uuid()}"
 
-    total = sum(len(v) for v in by_layer.values())
-    counter = 0
+    total = sum(len(shapes) for shapes in by_layer.values())
 
     for slot, index in enumerate(sorted(by_layer)):
         layer = project.layers.get(index)
-        xcs_color, xcs_name = xcs_layer(slot)
-        layer_data[xcs_color] = {
-            "name": xcs_name,
-            "order": slot + 1,
-            "visible": True,
-        }
-        origin_color = (layer.color if layer else "#000000").lower()
+        # LightBurn's own palette colour becomes the XCS layer colour; XCS names
+        # layers by uppercase hex and does not remap to a fixed palette.
+        color = (layer.color if layer else "#000000").lower()
+        layer_data.setdefault(
+            color, {"name": color.upper(), "order": slot + 1, "visible": True}
+        )
 
         for shape in by_layer[index]:
-            contours = shape.contours
-            if not contours:
+            if not shape.contours:
                 continue
-            local = [c.mapped(to_local) for c in contours]
+            local = [c.mapped(to_local) for c in shape.contours]
             d_path = "".join(contour_to_path_data(c) for c in local)
             if not d_path:
                 continue
-            counter += 1
             displays.append(
                 _display(
                     d_path=d_path,
-                    layer_color=xcs_color,
-                    origin_color=origin_color,
-                    # Measured back off the serialised path, not the source
-                    # geometry: dPath is written at finite precision, and x/y/
-                    # width/height must agree with the string XCS will actually
-                    # parse, not with numbers a hair more precise.
+                    layer_color=color,
+                    # Measured off the serialised path: dPath is written at finite
+                    # precision, and x/y/width/height must agree with the string
+                    # XCS will parse, not with slightly more precise source values.
                     local_bbox=contours_bbox(parse_path_data(d_path)),
                     graphic_x=graphic_x,
                     graphic_y=graphic_y,
-                    z_order=float(total) + counter / max(total, 1) / 1000.0,
+                    z_order=_z_order(total, len(displays)),
+                    group_tag=group_tag,
                     closed=all(c.closed for c in local),
                     compound=len(local) > 1,
                 )
@@ -192,6 +293,20 @@ def project_to_xcs_dict(project: Project, *, title: str = "") -> dict:
 
     canvas_id = _uuid()
     created = _now_ms()
+    group_data = (
+        {
+            group_tag: {
+                "groupName": "",
+                "groupTag": group_tag,
+                "visible": True,
+                "enableTransform": True,
+                "zOrder": displays[-1]["zOrder"],
+            }
+        }
+        if displays
+        else {}
+    )
+
     return {
         "canvasId": canvas_id,
         "canvas": [
@@ -199,7 +314,7 @@ def project_to_xcs_dict(project: Project, *, title: str = "") -> dict:
                 "id": canvas_id,
                 "title": title or "{panel}1",
                 "layerData": layer_data,
-                "groupData": {},
+                "groupData": group_data,
                 "displays": displays,
                 "extendInfo": {
                     "version": XCS_CANVAS_VERSION,
@@ -211,22 +326,51 @@ def project_to_xcs_dict(project: Project, *, title: str = "") -> dict:
                 },
             }
         ],
-        "extId": "",
-        "extName": "",
-        # Left deliberately empty: XCS then applies its own material defaults
-        # rather than inheriting settings translated from LightBurn by guesswork.
+        "extId": device_id,
+        "extName": device_id,
         "device": {
-            "id": "",
-            "power": 0,
-            "data": {"dataType": "Map", "value": []},
+            "id": device_id,
+            "power": list(DEFAULT_DEVICE_POWER),
+            "data": {
+                "dataType": "Map",
+                "value": [
+                    [
+                        canvas_id,
+                        {
+                            "mode": "LIFTING_PLATFORM_PROCESS",
+                            "data": {
+                                "LIFTING_PLATFORM_PROCESS": {
+                                    "material": 0,
+                                    "focalLength": None,
+                                    "perimeter": None,
+                                    "diameter": None,
+                                    "distence": None,
+                                    "isProcessByLayer": False,
+                                    "pathPlanning": "auto",
+                                    "fillPlanning": "separate",
+                                    "scanDirection": "topToBottom",
+                                    "enableOddEvenKerf": True,
+                                    "xcsUsed": [],
+                                }
+                            },
+                            "displays": {
+                                "dataType": "Map",
+                                "value": [_process_entry(d["id"]) for d in displays],
+                            },
+                        },
+                    ]
+                ],
+            },
             "materialList": [],
             "materialTypeList": [],
+            "customProjectData": {},
         },
         "version": XCS_FILE_VERSION,
         "created": created,
         "modify": created,
         "ua": "lbrn2xcs",
         "meta": [{"version": XCS_FILE_VERSION, "date": created, "ua": "lbrn2xcs"}],
+        "cover": "",
         "minRequiredVersion": XCS_MIN_REQUIRED_VERSION,
         "appMinRequiredVersion": "",
         "webMinRequiredVersion": "",
@@ -234,7 +378,14 @@ def project_to_xcs_dict(project: Project, *, title: str = "") -> dict:
     }
 
 
-def write_xcs(project: Project, path: Path, *, title: str = "") -> None:
+def write_xcs(
+    project: Project,
+    path: Path,
+    *,
+    title: str = "",
+    origin: tuple[float, float] = (0.0, 0.0),
+    device_id: str = DEFAULT_DEVICE_ID,
+) -> None:
     """Write *project* to *path* as a ``.xcs`` file."""
-    doc = project_to_xcs_dict(project, title=title)
+    doc = project_to_xcs_dict(project, title=title, origin=origin, device_id=device_id)
     Path(path).write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")

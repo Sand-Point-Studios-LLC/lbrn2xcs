@@ -179,37 +179,53 @@ def describe_device_processing(doc: dict, limit: int) -> None:
 
 
 def render_svg(displays: list[dict], out_path: Path) -> None:
-    """Re-render the displays as SVG using the transform reading we believe correct.
+    """Re-render the displays as SVG using the confirmed transform.
 
-    If the output matches what XCS shows on its canvas, the interpretation of
-    x/y/scale/skew is right. If it doesn't, the difference is the clue.
+        canvas_x = graphicX + scale.x * local_x
+        canvas_y = graphicY + scale.y * local_y
+
+    with the Y term negated when the display carries skew.x = π (a vertical
+    mirror). If this render matches what XCS shows on its canvas, the reading is
+    right; where it doesn't, the difference is the clue.
     """
     body: list[str] = []
+    bounds: list[tuple[float, float]] = []
     for d in displays:
         dpath = d.get("dPath")
         if not dpath:
             continue
         sx = (d.get("scale") or {}).get("x", 1) or 1
         sy = (d.get("scale") or {}).get("y", 1) or 1
-        x, y = d.get("x", 0), d.get("y", 0)
         gx, gy = d.get("graphicX", 0), d.get("graphicY", 0)
         angle = d.get("angle", 0) or 0
         color = d.get("layerColor") or "#000000"
-        # Working hypothesis: dPath is in a local unit space, scaled by `scale`,
-        # then placed at (x, y) with the graphic offset removed.
-        parts = [f"translate({x - gx},{y - gy})"]
+        mirrored = abs((d.get("skew") or {}).get("x", 0) - math.pi) < 1e-6
+
+        parts = [f"translate({gx},{gy})"]
         if angle:
             parts.append(f"rotate({angle})")
-        parts.append(f"scale({sx},{sy})")
+        parts.append(f"scale({sx},{-sy if mirrored else sy})")
         body.append(
             f'<g transform="{" ".join(parts)}" fill="none" stroke="{color}" '
             f'stroke-width="{0.2 / max(abs(sx), 1e-6):.6g}"><path d="{dpath}"/></g>'
         )
+        bounds.append((d.get("x", 0), d.get("y", 0)))
+        bounds.append((d.get("x", 0) + d.get("width", 0), d.get("y", 0) + d.get("height", 0)))
+
+    if bounds:
+        xs = [p[0] for p in bounds]
+        ys = [p[1] for p in bounds]
+        pad = 10.0
+        vx, vy = min(xs) - pad, min(ys) - pad
+        vw, vh = (max(xs) - min(xs)) + 2 * pad, (max(ys) - min(ys)) + 2 * pad
+    else:
+        vx, vy, vw, vh = 0.0, 0.0, 100.0, 100.0
+
     svg = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" '
-        'viewBox="-50 -50 900 700">\n'
-        '<rect x="-50" y="-50" width="900" height="700" fill="white"/>\n'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{vw}mm" height="{vh}mm" '
+        f'viewBox="{vx} {vy} {vw} {vh}">\n'
+        f'<rect x="{vx}" y="{vy}" width="{vw}" height="{vh}" fill="white"/>\n'
         + "\n".join(body)
         + "\n</svg>\n"
     )

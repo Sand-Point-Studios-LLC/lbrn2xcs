@@ -72,44 +72,59 @@ and a nearest-ACI index set. Beziers are flattened to polylines at `--tolerance`
 
 ## Native .xcs
 
-`.xcs` is undocumented, but it is plain UTF-8 JSON (not zipped) and its geometry
-model was measured, not guessed. Each drawable is a `display` of type `PATH` whose
-`dPath` is ordinary SVG path data in a local space, mapped to canvas millimetres by:
+`.xcs` is undocumented but is plain UTF-8 JSON (not zipped). The format was
+established by round-tripping a known-geometry probe through XCS itself — import
+an SVG whose every coordinate we chose, save, and read back what XCS wrote —
+then cross-checking against six unrelated real projects.
+
+Each drawable is a `display`. `PATH` displays carry `dPath`: ordinary SVG path
+data, Y-down, in millimetres, stored **verbatim** — XCS keeps an imported path's
+data byte-for-byte and positions it with:
 
 ```
 canvas_x = graphicX + scale.x * local_x
-canvas_y = graphicY - scale.y * local_y      # note the minus
+canvas_y = graphicY + scale.y * local_y
 ```
 
-Those two formulas reproduce the stored `x`/`y` on **100% of 5,995 displays**
-across every real sample, spanning two different XCS format generations, and
-`width`/`height` are the local bbox size times `scale`. The negated Y is the
-`skew.x = π` that every display carries.
+`x`/`y` are the local bbox minimum corner through that transform (using the
+curve's true extrema, not its control points) and `width`/`height` are the local
+bbox size times `scale`.
 
-A cross-check fell out of the same analysis: the `originColor` values XCS keeps for
-imported art are exactly LightBurn palette entries, which independently confirms
-both the palette table and the colour→layer path.
+One trap worth recording: vertically mirrored art carries `skew.x = π`, and then
+the Y term is *negated*. Every file in the initial sample set happened to be
+mirrored, which made the minus sign look intrinsic — it isn't. A straightforward
+import has `skew = 0`. The probe is what caught this.
 
-Machine settings (`device`) are deliberately left empty, exactly as XCS's own
-older files do, so XCS applies its material defaults on open. Translating
-LightBurn power/speed onto xTool's material model is a separate problem, and
-getting it silently wrong would be worse than not doing it.
+**Layers pass straight through.** XCS does not snap imported art onto a fixed
+palette: it creates one layer per distinct stroke colour, named with the uppercase
+hex. So LightBurn's palette colours are written as XCS layer colours directly and
+the layer structure survives exactly.
 
-**Still to confirm:** that a written `.xcs` opens cleanly in a current XCS build.
-The round-trip harness is ready:
+Machine settings are written with XCS's own defaults for a fresh import
+(`VECTOR_ENGRAVING`, `materialType: customize`) rather than translated from
+LightBurn. xTool's material model is not a unit conversion away from LightBurn's
+power/speed, and a silently wrong power setting is worse than an obvious default
+you set in XCS.
+
+### Verification status
+
+Confirmed: XCS's own output decodes exactly as described, and a `.xcs` written by
+this tool decodes back to geometry identical to its SVG. Every field and top-level
+key emitted is one XCS writes itself — the test suite asserts that against the
+probe file, and skips if you haven't produced one.
+
+Not yet confirmed: that XCS *opens* a file written here. Try one, and if anything
+looks off, the harness is the way in:
 
 ```bash
 python tools/make_probe_svg.py          # known-geometry SVG, exact mm coordinates
-#   -> import samples/probe/xcs_probe.svg into XCS, save as xcs_probe.xcs
+#   -> import samples/probe/xcs_probe.svg into XCS, save as samples/probe/xcs_probe.xcs
 python tools/decode_xcs.py samples/probe/xcs_probe.xcs --svg out/probe-decoded.svg
 ```
 
 `decode_xcs.py` reports on any `.xcs` — versions, layer table, per-display
-transforms, machine parameters — and can re-render the displays to SVG, so a wrong
+transforms, machine parameters — and re-renders the displays to SVG, so a wrong
 coordinate reading is visible rather than theoretical.
-
-Until that round-trip passes, prefer SVG: it is the low-risk path and XCS imports
-it directly.
 
 ## Development
 

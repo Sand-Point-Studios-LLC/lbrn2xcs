@@ -53,62 +53,79 @@ shapes in this corpus; exactly one lacks a backup path.
 | `QrCode` | 66 shapes / 10 files | Only `Content` + `ErrorCorrection` are stored; regenerating needs a QR encoder. |
 | Single-vertex `Path` | 5 shapes | Degenerate stray points. Nothing to draw; reported, not emitted. |
 
-## Tier B — native `.xcs` — **writer built, round-trip unverified**
+## Tier B — native `.xcs` — **writer built, matches XCS's own output**
 
-`.xcs` turned out to be plain UTF-8 JSON, not zipped, and inspectable. Two format
-generations appear in the samples (a 2024 one and the current one), and the
-geometry contract is identical in both.
+`.xcs` is plain UTF-8 JSON, not zipped. The contract was settled by round-tripping
+a known-geometry probe through XCS (`tools/make_probe_svg.py` → import → save →
+`tools/decode_xcs.py`) and cross-checking six unrelated real projects.
 
 ### The coordinate contract
 
-Each drawable is a `display` of type `PATH`. `dPath` is ordinary SVG path data in
-a local space; the mapping to canvas millimetres is:
+`PATH` displays carry `dPath`: ordinary SVG path data, Y-down, in millimetres,
+kept **verbatim** — the probe's `M60,110 C80,70 110,110 130,80` came back
+byte-for-byte. Placement is:
 
 ```
 canvas_x = graphicX + scale.x * local_x
-canvas_y = graphicY - scale.y * local_y      # note the minus
+canvas_y = graphicY + scale.y * local_y
 ```
 
-`x`/`y` hold the local bbox's minimum corner run through that same transform, and
-`width`/`height` are the local bbox size times `scale`. Confirmed on **5,995 of
-5,995 displays** — the residual median is ~1e-6 mm, i.e. float noise. The negated
-Y is what the `skew.x = π` on every display encodes.
+`x`/`y` are the local bbox minimum corner through that same transform, using the
+curve's *true extrema* rather than its control points (the probe's bezier reports
+`height: 30` for a curve whose control points span 40, which is how we know).
+`width`/`height` are the local bbox size times `scale`.
 
-The writer exploits the negation instead of fighting it: LightBurn is already
-Y-up, so `dPath` is emitted in LightBurn's own orientation with `graphicY` set to
-the drawing height, which makes `canvas_y` come out Y-down and correct without
-transforming the geometry.
+**The mirror trap.** Vertically mirrored art carries `skew.x = π`, and then the Y
+term is negated. All six of the initially available samples were mirrored, so the
+minus sign fit 5,995 of 5,995 displays and looked intrinsic. It isn't — a plain
+import has `skew = 0` and a plus. Measuring a large corpus was not enough here;
+only a probe with known input distinguished "always true" from "true of every file
+I happened to have". Worth remembering for the next format.
 
-Other invariants that hold across every sample and are reproduced on output:
+Also reproduced on output because XCS writes them on every display:
 `offsetX == graphicX`, `offsetY == graphicY`, `localSkew == skew`, `angle == 0`,
-`isFill == false`, `fillRule == "nonzero"`, `lockRatio == true`, `points == []`.
+`isFill == false`, `fillRule == "nonzero"`, `lockRatio == true`, `points == []`,
+plus the constants `lineColor: 16421416` and `fillColor: "#f9932b"`.
 
 ### Layers
 
-`layerData` maps an XCS palette colour → `{name, order, visible}`; displays point
-at one via `layerTag`/`layerColor`. XCS snaps imported stroke colours onto its own
-8-colour palette and preserves the pre-import colour in `originColor`.
+XCS does **not** snap imported art onto a fixed palette. It creates one layer per
+distinct stroke colour, keyed by lowercase hex in `layerData` and named with the
+uppercase hex; `originColor` equals the layer colour. The probe's five stroke
+colours produced exactly five layers. So LightBurn palette colours are written
+through unchanged and layer structure survives exactly — no remapping, and no
+8-colour ceiling.
 
-Useful confirmation: in a LightBurn-derived `.xcs`, the `originColor` values are
-exactly LightBurn palette entries (`#0000ff`, `#00e0e0`, `#d0d000`, `#b45a00`,
-`#004754` = C01/C06/C04/C26/C27). That independently validates the palette table
-in `palette.py` *and* the whole LightBurn-colour → SVG-stroke → XCS-layer path.
+(An earlier reading of the older sample files suggested a fixed 8-colour palette
+with `{Red}`-style i18n names. Those names appear in 2024-era files; current XCS
+names layers by hex.)
 
-### Machine settings — deliberately not translated
+### Native shape types
 
-The `device` block holds per-display power/speed/`processingType`
-(`VECTOR_CUTTING` / `VECTOR_ENGRAVING` / `FILL_VECTOR_ENGRAVING`) keyed by display
-id, plus a material id and lift-platform config. The writer leaves it empty, as
-XCS's own older files do, so XCS applies material defaults on open. Mapping
-LightBurn's mm/s + %power onto xTool's material model is a separate problem and a
-silently wrong power setting is worse than no setting.
+XCS has `RECT`, `CIRCLE` and `TEXT` display types alongside `PATH` — the probe's
+rect became a `RECT` with native `angle: 30` for the rotated one, and its circle a
+`CIRCLE` with `scale: 0.01`. `PATH` is used for everything written here: it round-
+trips exactly, keeps beziers, and avoids a second geometry encoding to get wrong.
 
-### What's left to verify
+### Machine settings
 
-1. **Does a written `.xcs` open in the current XCS build?** Everything else is
-   downstream of this. `tools/make_probe_svg.py` emits a known-geometry SVG
-   (exact mm, asymmetric so mirroring can't hide); import it into XCS, save, then
-   `tools/decode_xcs.py` reports what XCS wrote and can re-render it to SVG.
-2. Whether `extId`/`device.id` must name a machine (`P3`) or may stay empty.
-3. Whether the `cover` thumbnail matters, or XCS regenerates it.
-4. Whether `groupData` needs populating to keep shapes grouped on open.
+`device.data` maps canvas id → `{mode, data, displays}`, where `displays` is a
+list of `[displayId, config]` pairs holding `processingType`
+(`VECTOR_CUTTING` / `VECTOR_ENGRAVING` / `FILL_VECTOR_ENGRAVING`) and full
+parameter blocks per type. Written here with XCS's own fresh-import defaults
+(`VECTOR_ENGRAVING`, `materialType: customize`, power 1 / speed 20) rather than
+translated from LightBurn: xTool's material model is not a unit conversion away
+from LightBurn's mm/s + %power, and a silently wrong power setting is worse than
+an obvious default.
+
+### What's verified, and what isn't
+
+Verified: XCS's own output decodes exactly as described above; a `.xcs` written
+here decodes back to geometry identical to its SVG; and every field and top-level
+key emitted is one XCS writes itself (asserted in `tests/test_xcs_out.py` against
+the probe, skipped when no probe is present).
+
+Not verified: that XCS opens a file written here. If it doesn't, likely suspects
+in order — `cover` (written empty; XCS writes a base64 PNG thumbnail),
+`groupData` wiring, and whether `material: 0` is acceptable when no material has
+been chosen.

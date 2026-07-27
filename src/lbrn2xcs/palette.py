@@ -1,10 +1,10 @@
-"""Colour palettes for LightBurn layers and XCS layers.
+"""LightBurn's layer colour palette.
 
 LightBurn identifies a layer by its index (``CutIndex``) and paints it with a
-fixed 30-entry palette (C00–C29) plus two tool layers. XCS has its own, much
-smaller named palette; when it imports an SVG it snaps stroke colours onto that
-palette, so the ``.xcs`` writer maps LightBurn indices onto XCS layer colours
-rather than carrying LightBurn's hexes across.
+fixed 30-entry palette (C00–C29) plus two tool layers. Both SVG and ``.xcs``
+output carry these hexes through unchanged: XCS creates one layer per distinct
+stroke colour rather than snapping onto a palette of its own, so LightBurn's
+layer structure survives the trip intact.
 """
 
 from __future__ import annotations
@@ -60,23 +60,3 @@ def lightburn_layer_name(cut_index: int) -> str:
     if 0 <= cut_index < len(LIGHTBURN_COLORS):
         return f"C{cut_index:02d}"
     return f"T{cut_index - len(LIGHTBURN_COLORS) + 1}"
-
-
-# XCS's layer palette, as observed in real .xcs files. XCS names layers with
-# i18n placeholders ("{Black}") which the UI renders as the localised colour
-# name. Order matters: LightBurn indices are assigned round-robin over this.
-XCS_LAYER_COLORS: tuple[tuple[str, str], ...] = (
-    ("#000000", "{Black}"),
-    ("#fe0002", "{Red}"),
-    ("#00c715", "{Green}"),
-    ("#2366ff", "{Blue}"),
-    ("#e1c000", "{Yellow}"),
-    ("#ff7f56", "{Orange}"),
-    ("#a958ff", "{Purple}"),
-    ("#00befe", "{Cyan}"),
-)
-
-
-def xcs_layer(slot: int) -> tuple[str, str]:
-    """(hex, name) for the *slot*-th XCS layer, wrapping around the palette."""
-    return XCS_LAYER_COLORS[slot % len(XCS_LAYER_COLORS)]
