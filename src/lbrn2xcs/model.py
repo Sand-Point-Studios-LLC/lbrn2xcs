@@ -172,6 +172,10 @@ class Shape:
 class Project:
     source: str = ""
     app_version: str = ""
+    mirror_x: bool = False
+    mirror_y: bool = False
+    """Root MirrorX/MirrorY as found in the file. The geometry has already been
+    normalised out of that handedness by the parser; these are kept for reporting."""
     layers: dict[int, Layer] = field(default_factory=dict)
     shapes: list[Shape] = field(default_factory=list)
     skipped: dict[str, int] = field(default_factory=dict)

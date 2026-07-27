@@ -65,6 +65,11 @@ Layer identity is preserved by colour, using LightBurn's real 30-entry palette
 real `mm`. Y is flipped (LightBurn is Y-up, SVG is Y-down) and geometry is shifted
 to a (0,0) origin. Beziers stay beziers.
 
+Orientation depends on the project's root `MirrorX`/`MirrorY`, which describe the
+handedness the geometry is *stored* in — not just a device output preference. The
+parser normalises that away, so a `MirrorY="True"` file (214 of 414 here) comes
+out the same way up as a `MirrorY="False"` one.
+
 **DXF** — R2010, millimetres, one layer per LightBurn layer with both true-colour
 and a nearest-ACI index set. Beziers are flattened to polylines at `--tolerance`
 (default 0.05 mm).

@@ -423,11 +423,33 @@ def parse_lbrn(path: Path) -> Project:
         root = ET.fromstring(raw.decode("utf-8", "replace").encode("utf-8"))
 
     project = Project(source=str(path), app_version=root.get("AppVersion") or "")
+    project.mirror_x = (root.get("MirrorX") or "").strip().lower() == "true"
+    project.mirror_y = (root.get("MirrorY") or "").strip().lower() == "true"
     project.layers = _parse_layers(root)
 
     cache = _GeometryCache.from_document(root)
     for node in root.findall("Shape"):
         _walk(node, IDENTITY, 0, project, cache)
+
+    # The root's MirrorX/MirrorY are not just a device output preference — they
+    # describe the handedness the geometry is stored in, so a file saved with
+    # MirrorY="True" holds its coordinates already flipped. Normalising here, in
+    # the parser, means every emitter can assume one convention.
+    #
+    # Checked across the library by rendering each file and correlating it
+    # against the <Thumbnail> LightBurn embeds: of 200 files where the comparison
+    # was conclusive, all 200 agreed — MirrorY="False" needs no flip, MirrorY=
+    # "True" needs a vertical one, with no exceptions. (In this library MirrorX is
+    # always False, so that half of the rule is by symmetry, not measurement.)
+    if project.mirror_x or project.mirror_y:
+        sx = -1.0 if project.mirror_x else 1.0
+        sy = -1.0 if project.mirror_y else 1.0
+
+        def unmirror(p: tuple[float, float]) -> tuple[float, float]:
+            return (p[0] * sx, p[1] * sy)
+
+        for shape in project.shapes:
+            shape.contours = [c.mapped(unmirror) for c in shape.contours]
 
     # Any CutIndex used by geometry but missing a CutSetting still needs a layer.
     for shape in project.shapes:

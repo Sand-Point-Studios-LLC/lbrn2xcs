@@ -19,6 +19,21 @@ Converts the whole library: 1,403,289 shapes across 414 files, zero failures.
   (`Polygon` and `Line` are handled too but don't appear in this corpus.)
 * `<XForm>a b c d e f</XForm>` is an affine matrix in SVG `matrix()` order and
   composes down through `Group`/`<Children>`.
+* The root's `MirrorX`/`MirrorY` are **not** merely a device output preference —
+  they describe the handedness the geometry is stored in. A `MirrorY="True"` file
+  holds its coordinates already flipped, so converting it without accounting for
+  that yields an upside-down drawing. The library splits almost evenly: 214 files
+  `MirrorY="True"`, 200 `"False"`. The parser normalises this so every emitter
+  can assume one convention.
+
+**Thumbnails as a test oracle.** `<Thumbnail Source="base64 png">` is LightBurn's
+own render of the design, which makes it ground truth for any orientation or
+placement question. Rendering each converted file and correlating it against its
+thumbnail (four candidate flips, take the best) turned the `MirrorY` question from
+a guess into a measurement: of 200 files where the comparison was conclusive, all
+200 agreed — `False` needs no flip, `True` needs a vertical one. The same
+technique settled the `<BackupPath>` placement bug. It is the highest-value tool
+in this repo for anything geometric.
 
 **`Path` geometry.** `<VertList>` is a run-together sequence of `V<x> <y>`
 vertices, each optionally carrying bezier handles `c0x`/`c0y` and `c1x`/`c1y` in
