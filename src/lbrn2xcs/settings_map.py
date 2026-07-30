@@ -259,6 +259,11 @@ def convert(
         repeat=repeat,
         density=_density_from_interval(layer.interval),
         kerf=layer.kerf or 0.0,
-        ignored=not layer.output or layer.hidden,
+        # Only LightBurn's output toggle gates processing. `hide` is independent
+        # UI visibility — 14 layers in this library are explicitly doOutput=1 with
+        # hide=1, so treating hidden as "don't process" would silently drop work
+        # the user had switched on. Hidden layers are still written visible in XCS,
+        # since seeing the geometry is what you want when reviewing a conversion.
+        ignored=not layer.output,
         note=note,
     )

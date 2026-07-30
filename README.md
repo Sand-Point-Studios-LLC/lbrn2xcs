@@ -138,8 +138,14 @@ doing a cut's worth of work — converting it as light surface marking would bur
 straight through the piece.
 
 Also carried across: passes to `repeat`, fill line interval to `density`, kerf to
-`kerfDistance`, and LightBurn's disabled/hidden layers to `processIgnore` (about
-47% of layers in this library, since stacked designs enable one sheet at a time).
+`kerfDistance`, and LightBurn's output toggle to `processIgnore`.
+
+Note that LightBurn's `doOutput` and `hide` are *independent* — 14 layers in this
+library are explicitly `doOutput=1` with `hide=1`. Only the output toggle gates
+processing; hidden layers are still written visible in XCS, since seeing the
+geometry is what you want when reviewing a conversion. Stacked designs often have
+every layer switched off (you enable one per sheet), and the CLI says so
+explicitly rather than handing you a file where nothing runs.
 
 ```bash
 lbrn2xcs project.lbrn2 --format xcs                       # translate (default)

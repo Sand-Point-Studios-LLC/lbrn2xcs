@@ -172,9 +172,15 @@ def test_missing_speed_is_flagged():
     assert result.ignored is True
 
 
-def test_disabled_layers_are_marked_ignored():
+def test_only_the_output_toggle_gates_processing():
+    """`hide` is UI visibility and is independent of output.
+
+    14 layers in the library are explicitly doOutput=1 with hide=1, so treating
+    hidden as "do not process" would drop work the user had switched on.
+    """
     assert convert(layer(name="Cut", speed=8.0, output=False)).ignored is True
-    assert convert(layer(name="Cut", speed=8.0, hidden=True)).ignored is True
+    assert convert(layer(name="Cut", speed=8.0, hidden=True)).ignored is False
+    assert convert(layer(name="Cut", speed=8.0, output=False, hidden=True)).ignored is True
     assert convert(layer(name="Cut", speed=8.0)).ignored is False
 
 

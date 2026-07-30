@@ -74,7 +74,9 @@ def _settings_report(project: Project, machine: Machine) -> list[str]:
         ]
         flags = []
         if s.ignored:
-            flags.append("no output")
+            flags.append("output off in LightBurn")
+        if layer.hidden:
+            flags.append("hidden")
         if s.note:
             flags.append(s.note)
         if s.density is not None:
@@ -232,6 +234,12 @@ def main(argv: list[str] | None = None) -> int:
             if "xcs" in formats and machine is not None:
                 for line in _settings_report(project, machine):
                     print(line)
+                used = project.used_layers()
+                if used and all(not layer.output for layer in used):
+                    print(
+                        "      NOTE: every layer has output off in LightBurn, so "
+                        "nothing will process until you enable one in XCS"
+                    )
 
     ok = len(inputs) - len(failures)
     print(f"\nDone: {ok}/{len(inputs)} converted.")
