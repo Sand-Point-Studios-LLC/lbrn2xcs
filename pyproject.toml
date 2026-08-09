@@ -3,11 +3,12 @@ name = "lbrn2xcs"
 version = "0.0.1"
 description = "Batch-convert LightBurn projects (.lbrn/.lbrn2) toward xTool Creative Space (XCS), via SVG/DXF (and experimental native .xcs)."
 requires-python = ">=3.13"
-# ezdxf is the only third-party dependency, and it is imported lazily — SVG and
-# .xcs output work without it. (SVG is written directly rather than via svgwrite,
-# so that beziers and mm units survive exactly as intended.)
+# defusedxml prevents XXE attacks in user-supplied .lbrn files.
+# ezdxf is imported lazily — SVG and .xcs output work without it.
+# (SVG is written directly rather than via svgwrite, so beziers and mm units survive.)
 dependencies = [
     "ezdxf>=1.1",
+    "defusedxml>=0.0.1",
 ]
 
 [project.optional-dependencies]

@@ -38,9 +38,10 @@ from __future__ import annotations
 
 import math
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+
+from defusedxml.ElementTree import fromstring
 
 from .model import IDENTITY, Contour, Layer, Matrix, Project, Segment, Shape, apply, mat_mul
 from .palette import lightburn_color, lightburn_layer_name
@@ -416,11 +417,15 @@ def _parse_layers(root: ET.Element) -> dict[int, Layer]:
 def parse_lbrn(path: Path) -> Project:
     """Parse a ``.lbrn``/``.lbrn2`` file into a :class:`Project`."""
     # LightBurn occasionally writes stray bytes; be forgiving about encoding.
+    from xml.etree.ElementTree import ParseError
+
     raw = Path(path).read_bytes()
     try:
-        root = ET.fromstring(raw)
-    except ET.ParseError:
-        root = ET.fromstring(raw.decode("utf-8", "replace").encode("utf-8"))
+        root = fromstring(raw)
+    except (ParseError, Exception):
+        # defusedxml raises ParseError for malformed XML and EntitiesForbidden
+        # for entity-based attacks. Retry with UTF-8 damage recovery.
+        root = fromstring(raw.decode("utf-8", "replace").encode("utf-8"))
 
     project = Project(source=str(path), app_version=root.get("AppVersion") or "")
     project.mirror_x = (root.get("MirrorX") or "").strip().lower() == "true"

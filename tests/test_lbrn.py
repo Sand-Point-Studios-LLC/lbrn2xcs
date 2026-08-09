@@ -450,3 +450,70 @@ def test_mirror_flag_is_case_insensitive(tmp_path):
         )
     )
     assert lower.mirror_y is True
+
+
+class TestXXEDefense:
+    """Verify that XXE (external entity expansion) attacks are prevented.
+
+    These tests confirm that defusedxml disables dangerous entity expansion
+    in user-supplied .lbrn/.lbrn2 project files.
+    """
+
+    def test_xxe_external_entity_expansion_blocked(self, tmp_path):
+        """External entity references in LBRN should not be resolved."""
+        xxe_body = f"""
+        {CUT_SETTING}
+        <Shape Type="Path" CutIndex="0">
+          <VertList>V0 0c0x1c1x1V10 10c0x1c1x1</VertList>
+          <PrimList>L0 1</PrimList>
+        </Shape>"""
+        xxe_payload = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE LightBurnProject [
+          <!ENTITY xxe SYSTEM "file:///etc/passwd">
+        ]>
+        <LightBurnProject AppVersion="1.5.06">
+          {xxe_body}
+          <!-- Try to use the entity -->
+          <Comment>&xxe;</Comment>
+        </LightBurnProject>"""
+        path = tmp_path / "xxe.lbrn2"
+        path.write_text(xxe_payload, encoding="utf-8")
+        # defusedxml should raise when it encounters entity declarations
+        with pytest.raises(Exception):  # ParseError or EntitiesForbidden
+            parse_lbrn(path)
+
+    def test_xxe_billion_laughs_prevented(self, tmp_path):
+        """Billion-laughs entity exhaustion attacks should fail gracefully."""
+        billion_laughs_payload = """<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE LightBurnProject [
+          <!ENTITY lol "lol">
+          <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+          <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+        ]>
+        <LightBurnProject AppVersion="1.5.06">
+          <CutSetting type="Cut">
+            <index Value="0"/>
+            <name Value="L" />
+          </CutSetting>
+          <Shape Type="Rect" CutIndex="0" W="10" H="10" Cr="0">
+            <XForm>1 0 0 1 0 0</XForm>
+            <Comment>&lol3;</Comment>
+          </Shape>
+        </LightBurnProject>"""
+        path = tmp_path / "billionlaughs.lbrn2"
+        path.write_text(billion_laughs_payload, encoding="utf-8")
+        # defusedxml should raise when it encounters entity declarations
+        with pytest.raises(Exception):  # ParseError or EntitiesForbidden
+            parse_lbrn(path)
+
+    def test_valid_lbrn_still_parses(self, tmp_path):
+        """Legitimate, valid LBRN should continue to work."""
+        body = f"""{CUT_SETTING}
+        <Shape Type="Path" CutIndex="0">
+          <XForm>1 0 0 1 0 0</XForm>
+          <VertList>V0 0c0x1c1x1V10 0c0x1c1x1V10 10c0x1c1x1</VertList>
+          <PrimList>LineClosed</PrimList>
+        </Shape>"""
+        project = parse_lbrn(write(tmp_path, body))
+        assert len(project.shapes) == 1
+        assert len(project.shapes[0].contours) == 1
