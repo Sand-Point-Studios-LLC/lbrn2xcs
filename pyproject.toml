@@ -30,3 +30,9 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "TID", "ISC"]
+
+# TID rule: Prevents direct anthropic/openai imports; route via LiteLLM gateway (vigil-server:9002).
+# See ~/dev-context/guides/llm-gateway-lint-rule.md for details and exemption guidance.
