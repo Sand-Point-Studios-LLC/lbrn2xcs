@@ -32,7 +32,15 @@ line-length = 100
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "TID", "ISC"]
+select = ["E", "F", "W", "I", "UP", "TID251", "ISC"]
 
 # TID rule: Prevents direct anthropic/openai imports; route via LiteLLM gateway (vigil-server:9002).
 # See ~/dev-context/guides/llm-gateway-lint-rule.md for details and exemption guidance.
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Route LLM calls through LiteLLM (vigil-server:9002) so spend is metered and
+# local models stay $0. See ~/dev-context/guides/llm-gateway-lint-rule.md.
+# Genuine direct-SDK needs (vision, image gen, eval harnesses) are fine —
+# annotate the line with `# noqa: TID251 - <reason>`.
+"anthropic".msg = "Route LLM calls via LiteLLM (vigil-server:9002). Direct SDK use needs `# noqa: TID251 - <reason>`."
+"openai".msg = "Route LLM calls via LiteLLM (vigil-server:9002). Direct SDK use needs `# noqa: TID251 - <reason>`."
