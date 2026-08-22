@@ -4,8 +4,8 @@
 This project is part of Teagan Dixon's development environment.
 Cross-project context lives at `~/dev-context/` — consult before provisioning
 resources, choosing ports, or making architectural decisions. Key files:
-`toolchain.md`, `conventions.md`, `active-projects.md`, `decisions-log.md`.
-After significant decisions, append to `~/dev-context/decisions-log.md`.
+`toolchain.md`, `conventions.md`, `active-projects.md`, `decisions-index.md`.
+After significant decisions, append to the current month's file in `~/dev-context/decisions/`, then rerun `scripts/build-decisions-index.py`.
 
 ---
 
@@ -22,7 +22,7 @@ not a commercial product, not part of StrataBurn (the laser-cut generator).
 
 ## Why this exists / the format landscape
 
-Decided in StrataBurn's **XDEC-161** (`~/dev-context/decisions-log.md`): both
+Decided in StrataBurn's **XDEC-161** (`~/dev-context/decisions-index.md`): both
 `.lbrn`/`.lbrn2` (LightBurn XML) and `.xcs` (xTool, **closed/undocumented**) are
 proprietary. StrataBurn deliberately exports neutral **SVG/DXF** (which both
 apps import) rather than native project files, to avoid the format + EULA
