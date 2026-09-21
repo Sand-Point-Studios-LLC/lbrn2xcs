@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 from lbrn2xcs.lbrn import parse_lbrn
 from lbrn2xcs.svg_path import contours_bbox, parse_path_data

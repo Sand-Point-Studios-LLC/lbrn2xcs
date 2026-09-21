@@ -1,7 +1,11 @@
 [project]
 name = "lbrn2xcs"
-version = "0.0.1"
-description = "Batch-convert LightBurn projects (.lbrn/.lbrn2) toward xTool Creative Space (XCS), via SVG/DXF (and experimental native .xcs)."
+version = "0.1.0"
+description = "Convert LightBurn projects (.lbrn/.lbrn2) to xTool Creative Space .xcs, SVG or DXF. Unofficial."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Sand Point Studios LLC", email = "help@strataburn.com" }]
 requires-python = ">=3.13"
 # ezdxf is the only third-party dependency, and it is imported lazily — SVG and
 # .xcs output work without it. (SVG is written directly rather than via svgwrite,
@@ -9,6 +13,10 @@ requires-python = ">=3.13"
 dependencies = [
     "ezdxf>=1.1",
 ]
+
+[project.urls]
+Homepage = "https://strataburn.com/converter"
+Source = "https://github.com/Sand-Point-Studios-LLC/lbrn2xcs"
 
 [project.optional-dependencies]
 dev = [
@@ -20,7 +28,7 @@ dev = [
 lbrn2xcs = "lbrn2xcs.cli:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -29,3 +37,8 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.ruff.lint]
+# Errors, pyflakes, warnings and import order. Kept deliberately small so a
+# ruff upgrade cannot turn CI red on style alone.
+select = ["E", "F", "W", "I"]
