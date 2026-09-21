@@ -85,8 +85,10 @@ def describe_canvas(canvas: dict, index: int) -> list[dict]:
     layer_data = canvas.get("layerData") or {}
     print(f"  layers ({len(layer_data)}):")
     for color, meta in layer_data.items():
-        print(f"    {color:10} order={meta.get('order'):<4} name={meta.get('name')!r} "
-              f"visible={meta.get('visible')}")
+        print(
+            f"    {color:10} order={meta.get('order'):<4} name={meta.get('name')!r} "
+            f"visible={meta.get('visible')}"
+        )
     group_data = canvas.get("groupData") or {}
     print(f"  groupData: {len(group_data)} group(s)")
     for gid, meta in list(group_data.items())[:5]:
@@ -97,7 +99,9 @@ def describe_canvas(canvas: dict, index: int) -> list[dict]:
     displays = canvas.get("displays") or []
     print(f"  displays: {len(displays)}")
     print(f"    types: {collections.Counter(d.get('type') for d in displays).most_common()}")
-    print(f"    per-layer: {collections.Counter(d.get('layerTag') for d in displays).most_common()}")
+    print(
+        f"    per-layer: {collections.Counter(d.get('layerTag') for d in displays).most_common()}"
+    )
     return displays
 
 
@@ -107,19 +111,35 @@ def describe_displays(displays: list[dict], limit: int, full: bool) -> None:
     print(f"DISPLAYS (showing {min(limit, len(displays))} of {len(displays)})")
     print("=" * 78)
     for d in displays[:limit]:
-        print(f"\n  --- {d.get('type')}  id={d.get('id')}  name={d.get('name')!r} "
-              f"layer={d.get('layerTag')} origColor={d.get('originColor')}")
+        print(
+            f"\n  --- {d.get('type')}  id={d.get('id')}  name={d.get('name')!r} "
+            f"layer={d.get('layerTag')} origColor={d.get('originColor')}"
+        )
         vals = {k: d.get(k) for k in TRANSFORM_KEYS if k in d}
         print("      " + "  ".join(f"{k}={_fmt(v)}" for k, v in vals.items()))
         for key in ("scale", "skew", "localSkew", "pivot"):
             if key in d:
                 s = d[key]
-                print(f"      {key}: x={_fmt(s.get('x'))} y={_fmt(s.get('y'))}"
-                      + (f"   [x={_fmt(math.degrees(s['x']))}deg y={_fmt(math.degrees(s['y']))}deg]"
-                         if key in ("skew", "localSkew") and isinstance(s.get("x"), (int, float))
-                         else ""))
-        for key in ("isClosePath", "isFill", "isCompoundPath", "fillRule", "lockRatio",
-                    "radius", "maxRadius", "groupTag", "resourceOrigin", "minCanvasVersion"):
+                print(
+                    f"      {key}: x={_fmt(s.get('x'))} y={_fmt(s.get('y'))}"
+                    + (
+                        f"   [x={_fmt(math.degrees(s['x']))}deg y={_fmt(math.degrees(s['y']))}deg]"
+                        if key in ("skew", "localSkew") and isinstance(s.get("x"), (int, float))
+                        else ""
+                    )
+                )
+        for key in (
+            "isClosePath",
+            "isFill",
+            "isCompoundPath",
+            "fillRule",
+            "lockRatio",
+            "radius",
+            "maxRadius",
+            "groupTag",
+            "resourceOrigin",
+            "minCanvasVersion",
+        ):
             if key in d:
                 print(f"      {key}: {_fmt(d[key])}")
         for key in ("stroke", "fill"):
@@ -134,10 +154,29 @@ def describe_displays(displays: list[dict], limit: int, full: bool) -> None:
             print(f"        {dpath if full else dpath[:400]}")
         # Anything we did not explicitly print
         known = set(TRANSFORM_KEYS) | {
-            "scale", "skew", "localSkew", "pivot", "isClosePath", "isFill", "isCompoundPath",
-            "fillRule", "lockRatio", "radius", "maxRadius", "groupTag", "resourceOrigin",
-            "minCanvasVersion", "stroke", "fill", "points", "dPath", "type", "id", "name",
-            "layerTag", "originColor",
+            "scale",
+            "skew",
+            "localSkew",
+            "pivot",
+            "isClosePath",
+            "isFill",
+            "isCompoundPath",
+            "fillRule",
+            "lockRatio",
+            "radius",
+            "maxRadius",
+            "groupTag",
+            "resourceOrigin",
+            "minCanvasVersion",
+            "stroke",
+            "fill",
+            "points",
+            "dPath",
+            "type",
+            "id",
+            "name",
+            "layerTag",
+            "originColor",
         }
         extra = {k: v for k, v in d.items() if k not in known}
         if extra:
@@ -166,15 +205,19 @@ def describe_device_processing(doc: dict, limit: int) -> None:
         print(f"    processingType: {counts.most_common()}")
         for display_id, entry in per_display[:limit]:
             print(f"\n      display {display_id}")
-            print(f"        processingType={entry.get('processingType')} "
-                  f"isFill={entry.get('isFill')} type={entry.get('type')} "
-                  f"processIgnore={entry.get('processIgnore')}")
+            print(
+                f"        processingType={entry.get('processingType')} "
+                f"isFill={entry.get('isFill')} type={entry.get('type')} "
+                f"processIgnore={entry.get('processIgnore')}"
+            )
             for ptype, pdata in (entry.get("data") or {}).items():
                 params = (pdata.get("parameter") or {}).get("customize")
                 if params is None:
                     params = pdata.get("parameter")
-                print(f"        {ptype}: materialType={pdata.get('materialType')} "
-                      f"planType={pdata.get('planType')}")
+                print(
+                    f"        {ptype}: materialType={pdata.get('materialType')} "
+                    f"planType={pdata.get('planType')}"
+                )
                 print(f"          {json.dumps(params)[:400]}")
 
 

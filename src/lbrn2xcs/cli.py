@@ -162,11 +162,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--source-machine",
         choices=(*SOURCE_MACHINES, "none"),
-        default="d1pro40",
+        default="none",
         help=(
             "Machine the LightBurn settings were tuned on, used to translate "
-            "power/speed for the P3 when writing .xcs. 'none' keeps XCS's own "
-            "defaults instead (default: d1pro40)"
+            "power/speed for the xTool P3 when writing .xcs. The default, 'none', "
+            "keeps XCS's own defaults so you set power for your own machine"
         ),
     )
     parser.add_argument(

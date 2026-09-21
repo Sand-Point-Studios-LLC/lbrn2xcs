@@ -11,14 +11,24 @@ After significant decisions, append to the current month's file in `~/dev-contex
 
 ## Project Overview
 
-**lbrn2xcs** is a personal batch tool to convert LightBurn projects
-(`.lbrn` / `.lbrn2`) toward **xTool Creative Space (XCS)**. Personal use only —
-not a commercial product, not part of StrataBurn (the laser-cut generator).
+**lbrn2xcs** converts LightBurn projects (`.lbrn` / `.lbrn2`) to **xTool
+Creative Space (XCS)** `.xcs`, SVG or DXF. **Open source (MIT) since
+2026-09-21**, published by Sand Point Studios as a free tool that points people
+at StrataBurn. A browser version (Pyodide, runs client-side) lives at
+`strataburn.com/converter`, built from this package.
 
-- **Owner**: Teagan Dixon (personal)
-- **Repo**: teaganwins-dev/lbrn2xcs (private)
-- **Directory**: `~/dev/lbrn2xcs/` (i.e. `C:\dev\lbrn2xcs`)
-- **Status**: scaffold only — implementation to be done in a dedicated session.
+- **Owner**: Sand Point Studios LLC
+- **Repo**: Sand-Point-Studios-LLC/lbrn2xcs (**public**)
+- **Directory**: `~/dev/lbrn2xcs/`
+- **Status**: working; XCS confirmed to open its `.xcs` output (P3, XCS 2.x).
+
+**Open-sourcing reversed the July rule** ("never redistribute the `.xcs`
+writer"). Teagan's call on 2026-09-21. The writer was built by reading files
+XCS saves (plain JSON), not by decompiling XCS, which xTool's terms forbid;
+several other open-source `.xcs` tools are public. Keep it that way: **never**
+add anything taken from inside the XCS application (code, assets, bundled
+data), stay "unofficial / not affiliated", and comply at once with any
+takedown request from xTool or LightBurn.
 
 ## Why this exists / the format landscape
 
@@ -61,5 +71,7 @@ LightBurn library into XCS.
 ## Conventions
 
 - Follow `~/dev-context/conventions.md` unless noted here.
-- Personal tool: keep it simple; a good CLI + tests beats a framework.
-- Never redistribute reverse-engineered `.xcs` writers commercially (personal use).
+- Keep it simple; a good CLI + tests beats a framework.
+- Public repo: no personal files in `samples/` commits, no machine-specific
+  defaults (power translation is opt-in via `--source-machine`).
+- Format knowledge comes only from files XCS writes, never from the app itself.

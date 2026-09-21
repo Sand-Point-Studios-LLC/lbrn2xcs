@@ -391,7 +391,9 @@ def write_with_header(tmp_path: Path, header: str, body: str) -> Path:
 
 
 def test_mirror_flags_are_recorded(tmp_path):
-    plain = parse_lbrn(write_with_header(tmp_path, '<LightBurnProject AppVersion="1.5.06">', MIRROR_BODY))
+    plain = parse_lbrn(
+        write_with_header(tmp_path, '<LightBurnProject AppVersion="1.5.06">', MIRROR_BODY)
+    )
     assert (plain.mirror_x, plain.mirror_y) == (False, False)
 
     mirrored = parse_lbrn(

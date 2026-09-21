@@ -3,13 +3,24 @@
 Batch-convert LightBurn projects (`.lbrn` / `.lbrn2`) toward xTool Creative Space
 (XCS) — via SVG/DXF, or as native `.xcs` project files.
 
-Personal tool. Both file formats are proprietary; nothing here is redistributed
-and none of it is for sale. See `CLAUDE.md` for the background (StrataBurn's
-XDEC-161).
+Free and open source (MIT), from the makers of
+[StrataBurn](https://strataburn.com). There is also a
+[free in-browser version](https://strataburn.com/converter): drop in a
+`.lbrn2`, get an `.xcs` back, and your file never leaves your computer.
+
+> **Unofficial.** Not affiliated with, endorsed by or supported by LightBurn
+> Software or xTool. "LightBurn" and "xTool" are their owners' trademarks and are
+> used here only to say which files this reads and writes. The `.xcs` format is
+> undocumented; it was worked out from files XCS itself saves (see below), not by
+> taking either application apart. xTool can change it in any release, so
+> **open one converted file in your XCS before trusting a batch.**
 
 ## Install
 
 ```bash
+python -m pip install git+https://github.com/Sand-Point-Studios-LLC/lbrn2xcs
+# or, to hack on it:
+git clone https://github.com/Sand-Point-Studios-LLC/lbrn2xcs && cd lbrn2xcs
 python -m pip install -e ".[dev]"
 ```
 
@@ -108,6 +119,11 @@ the layer structure survives exactly.
 
 ### Power and speed translation
 
+Off by default: a converted file gets XCS's own fresh-import defaults and you set
+power and speed for your machine and material, as you would after importing an
+SVG. Translation is opt-in with `--source-machine`, and today it only targets the
+xTool P3 80 W, because that is the machine its anchors were measured on.
+
 LightBurn and XCS use the same units (mm/s, % power), so this is not a unit
 conversion — it is a machine conversion, from a 40 W blue-diode D1 Pro to an 80 W
 CO2 P3. Wavelength matters more than wattage here: wood absorbs 10.6 µm far
@@ -148,9 +164,9 @@ every layer switched off (you enable one per sheet), and the CLI says so
 explicitly rather than handing you a file where nothing runs.
 
 ```bash
-lbrn2xcs project.lbrn2 --format xcs                       # translate (default)
-lbrn2xcs project.lbrn2 --format xcs --power-scale 0.8     # run 20% light while calibrating
-lbrn2xcs project.lbrn2 --format xcs --source-machine none # leave XCS defaults alone
+lbrn2xcs project.lbrn2 --format xcs                            # XCS defaults (no translation)
+lbrn2xcs project.lbrn2 --format xcs --source-machine d1pro40   # translate D1 Pro 40W -> P3
+lbrn2xcs project.lbrn2 --format xcs --source-machine d1pro40 --power-scale 0.8  # 20% light
 ```
 
 Every conversion is printed per layer so you can check it before burning:
@@ -191,6 +207,16 @@ python tools/decode_xcs.py samples/probe/xcs_probe.xcs --svg out/probe-decoded.s
 `decode_xcs.py` reports on any `.xcs` — versions, layer table, per-display
 transforms, machine parameters — and re-renders the displays to SVG, so a wrong
 coordinate reading is visible rather than theoretical.
+
+## Contributing
+
+Issues and pull requests are welcome, especially `.xcs` files from XCS versions or
+xTool machines other than the P3, since that is how the format stays correct. Use
+`tools/decode_xcs.py` to check what a file contains before sharing it.
+
+## Licence
+
+MIT. See `LICENSE`.
 
 ## Development
 

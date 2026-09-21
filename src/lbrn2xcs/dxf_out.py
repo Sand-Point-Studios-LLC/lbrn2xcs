@@ -63,7 +63,9 @@ def _bezier_steps(
     return min(max(steps, 2), MAX_SUBDIVISIONS)
 
 
-def flatten_contour(contour: Contour, tolerance: float = DEFAULT_TOLERANCE_MM) -> list[tuple[float, float]]:
+def flatten_contour(
+    contour: Contour, tolerance: float = DEFAULT_TOLERANCE_MM
+) -> list[tuple[float, float]]:
     """Contour -> plain point list, subdividing every bezier."""
     pts: list[tuple[float, float]] = [contour.start]
     for seg in contour.segments:
